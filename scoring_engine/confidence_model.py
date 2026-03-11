@@ -1,20 +1,22 @@
-from difflib import SequenceMatcher
+from typing import Dict
 
 
-def normalise_username(username: str) -> str:
+def calculate_confidence_score(features: Dict[str, float]) -> float:
     """
-    Lowercase and remove common separators to improve comparison.
-    Example:
-    kex-gh -> kexgh
+    Calculate a weighted confidence score from extracted features.
     """
-    return username.lower().replace("-", "").replace("_", "").strip()
+    weights = {
+        "username_similarity": 0.70,
+        "topic_similarity": 0.30,
+    }
 
+    total_weight = sum(weights.values())
+    if total_weight == 0:
+        return 0.0
 
-def compare_usernames(username_a: str, username_b: str) -> float:
-    """
-    Compare two usernames and return a similarity score between 0 and 1.
-    """
-    clean_a = normalise_username(username_a)
-    clean_b = normalise_username(username_b)
+    weighted_sum = 0.0
+    for feature_name, weight in weights.items():
+        value = features.get(feature_name, 0.0)
+        weighted_sum += value * weight
 
-    return SequenceMatcher(None, clean_a, clean_b).ratio()
+    return weighted_sum / total_weight
