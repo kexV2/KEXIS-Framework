@@ -1,3 +1,7 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
 from data_collection.github_api import get_github_profile
 from data_collection.github_activity import get_user_repos, extract_repo_features
 from data_collection.mastodon_api import search_mastodon_account, get_mastodon_posts
@@ -9,8 +13,23 @@ from feature_extraction.topic_similarity import (
 from scoring_engine.confidence_model import calculate_confidence_score
 
 
+app = FastAPI(title="KEXIS API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class AnalysisRequest(BaseModel):
+    github_username: str
+    mastodon_handle: str
+
+
 def classify_score(score: float) -> str:
-    """Convert numeric score into a human-readable label."""
     if score >= 0.7:
         return "High likelihood"
     if score >= 0.4:
@@ -25,9 +44,6 @@ def build_github_text_source(
     repo_descriptions: list[str],
     languages: list[str],
 ) -> list[str]:
-    """
-    Build a text evidence source from GitHub data.
-    """
     source = [github_username, bio]
     source.extend(repo_names)
     source.extend(repo_descriptions)
@@ -41,30 +57,21 @@ def build_mastodon_text_source(
     bio: str,
     posts: list[str],
 ) -> list[str]:
-    """
-    Build a text evidence source from Mastodon data.
-    """
     source = [mastodon_username, display_name, bio]
     source.extend(posts)
     return source
 
 
-def main() -> None:
-    print("=== KEXIS Cross-Platform Prototype ===")
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "KEXIS API is running"}
 
-    github_input = input("Enter GitHub username: ").strip()
-    mastodon_input = input("Enter Mastodon handle (e.g. xgh@mastodon.social): ").strip()
 
-    if not github_input or not mastodon_input:
-        print("Error: both GitHub username and Mastodon handle are required.")
-        return
-
-    print("\n[1] Collecting GitHub profile data...")
-    github_profile = get_github_profile(github_input)
-
+@app.post("/analyze")
+def analyze(request: AnalysisRequest):
+    github_profile = get_github_profile(request.github_username)
     if github_profile is None:
-        print("No GitHub profile found for that username.")
-        return
+        return {"error": "No GitHub profile found for that username."}
 
     github_username = github_profile.get("login", "")
     github_bio = github_profile.get("bio") or "No bio available"
@@ -72,7 +79,6 @@ def main() -> None:
     github_followers = github_profile.get("followers", 0)
     github_following = github_profile.get("following", 0)
 
-    print("[2] Collecting GitHub repository data...")
     github_repos = get_user_repos(github_username)
     github_repo_features = extract_repo_features(github_repos)
 
@@ -80,12 +86,9 @@ def main() -> None:
     github_repo_descriptions = github_repo_features["repo_descriptions"]
     github_languages = github_repo_features["languages"]
 
-    print("[3] Collecting Mastodon profile data...")
-    mastodon_profile = search_mastodon_account(mastodon_input)
-
+    mastodon_profile = search_mastodon_account(request.mastodon_handle)
     if mastodon_profile is None:
-        print("No Mastodon account found for that handle.")
-        return
+        return {"error": "No Mastodon account found for that handle."}
 
     mastodon_id = mastodon_profile["id"]
     mastodon_username = mastodon_profile["username"]
@@ -96,10 +99,8 @@ def main() -> None:
     mastodon_following = mastodon_profile["following"]
     mastodon_url = mastodon_profile["url"]
 
-    print("[4] Collecting Mastodon posts...")
     mastodon_posts = get_mastodon_posts(mastodon_id, limit=10)
 
-    print("[5] Extracting cross-platform features...")
     username_similarity = compare_usernames(github_username, mastodon_username)
 
     github_text_source = build_github_text_source(
@@ -125,40 +126,36 @@ def main() -> None:
         "topic_similarity": topic_similarity,
     }
 
-    print("[6] Calculating confidence score...")
     final_score = calculate_confidence_score(features)
     classification = classify_score(final_score)
 
-    print("\n=== Cross-Platform Attribution Report ===")
-
-    print("\n--- GitHub Evidence ---")
-    print(f"Username: {github_username}")
-    print(f"Bio: {github_bio}")
-    print(f"Public Repositories: {github_public_repos}")
-    print(f"Followers: {github_followers}")
-    print(f"Following: {github_following}")
-    print(f"Languages: {', '.join(github_languages) if github_languages else 'None detected'}")
-    print(f"Repository Names: {', '.join(github_repo_names) if github_repo_names else 'None detected'}")
-
-    print("\n--- Mastodon Evidence ---")
-    print(f"Username: {mastodon_username}")
-    print(f"Handle: {mastodon_acct}")
-    print(f"Display Name: {mastodon_display_name}")
-    print(f"Bio: {mastodon_bio}")
-    print(f"Followers: {mastodon_followers}")
-    print(f"Following: {mastodon_following}")
-    print(f"Profile URL: {mastodon_url}")
-    print(f"Recent Posts Collected: {len(mastodon_posts)}")
-
-    print("\n=== Feature Results ===")
-    print(f"Username Similarity: {username_similarity:.2f}")
-    print(f"Topic Similarity: {topic_similarity:.2f}")
-    print(f"Shared Keywords: {', '.join(shared_keywords) if shared_keywords else 'None detected'}")
-
-    print("\n=== Final Result ===")
-    print(f"Confidence Score: {final_score:.2f}")
-    print(f"Classification: {classification}")
-
-
-if __name__ == "__main__":
-    main()
+    return {
+        "github": {
+            "username": github_username,
+            "bio": github_bio,
+            "public_repos": github_public_repos,
+            "followers": github_followers,
+            "following": github_following,
+            "languages": github_languages,
+            "repo_names": github_repo_names,
+        },
+        "mastodon": {
+            "username": mastodon_username,
+            "handle": mastodon_acct,
+            "display_name": mastodon_display_name,
+            "bio": mastodon_bio,
+            "followers": mastodon_followers,
+            "following": mastodon_following,
+            "profile_url": mastodon_url,
+            "posts": mastodon_posts,
+        },
+        "features": {
+            "username_similarity": round(username_similarity, 2),
+            "topic_similarity": round(topic_similarity, 2),
+            "shared_keywords": shared_keywords,
+        },
+        "result": {
+            "confidence_score": round(final_score, 2),
+            "classification": classification,
+        },
+    }
