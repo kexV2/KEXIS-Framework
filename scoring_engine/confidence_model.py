@@ -6,8 +6,9 @@ def calculate_confidence_score(features: Dict[str, float]) -> float:
     Calculate a weighted confidence score from extracted features.
     """
     weights = {
-        "username_similarity": 0.70,
+        "username_similarity": 0.40,
         "topic_similarity": 0.30,
+        "activity_similarity": 0.30,
     }
 
     total_weight = sum(weights.values())

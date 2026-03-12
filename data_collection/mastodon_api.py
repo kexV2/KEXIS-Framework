@@ -117,3 +117,28 @@ def get_mastodon_posts(user_id: str, limit: int = 10) -> List[str]:
     except Exception as exc:
         print(f"Mastodon posts error: {exc}")
         return posts
+    
+def get_mastodon_post_timestamps(user_id: str, limit: int = 40) -> List[str]:
+    url = f"{MASTODON_INSTANCE}/api/v1/accounts/{user_id}/statuses"
+    params = {"limit": limit}
+    timestamps: List[str] = []
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+
+        if response.status_code != 200:
+            print(f"Mastodon timestamps returned status {response.status_code}")
+            return timestamps
+
+        statuses = response.json()
+
+        for status in statuses:
+            created_at = status.get("created_at")
+            if created_at:
+                timestamps.append(created_at)
+
+        return timestamps
+
+    except Exception as exc:
+        print(f"Mastodon timestamp fetch error: {exc}")
+        return timestamps
