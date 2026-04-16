@@ -3,6 +3,7 @@ import { useState } from "react";
 export default function App() {
   const [githubUsername, setGithubUsername] = useState("kexgh");
   const [mastodonHandle, setMastodonHandle] = useState("xgh@mastodon.social");
+  const [youtubeChannel, setYoutubeChannel] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -20,10 +21,27 @@ export default function App() {
         body: JSON.stringify({
           github_username: githubUsername,
           mastodon_handle: mastodonHandle,
+          youtube_channel: youtubeChannel,
         }),
       });
 
       const data = await response.json();
+
+      if (!response.ok) {
+        if (data?.detail) {
+          setError(
+            typeof data.detail === "string"
+              ? data.detail
+              : "Request failed. Check the backend request body."
+          );
+        } else if (data?.error) {
+          setError(data.error);
+        } else {
+          setError("Analysis request failed.");
+        }
+        setResult(null);
+        return;
+      }
 
       if (data.error) {
         setError(data.error);
@@ -42,6 +60,7 @@ export default function App() {
   function resetInputs() {
     setGithubUsername("");
     setMastodonHandle("");
+    setYoutubeChannel("");
     setError("");
     setResult(null);
   }
@@ -56,6 +75,7 @@ export default function App() {
 
   const github = result?.github ?? {};
   const mastodon = result?.mastodon ?? {};
+  const youtube = result?.youtube ?? {};
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -70,8 +90,8 @@ export default function App() {
           </h1>
 
           <p className="mt-4 max-w-3xl text-base text-zinc-400 md:text-lg">
-            Compare identity signals across GitHub and Mastodon using a
-            structured confidence score and explainable evidence indicators.
+            Compare identity signals across GitHub, Mastodon, and YouTube using
+            a structured confidence score and explainable evidence indicators.
           </p>
         </header>
 
@@ -109,6 +129,13 @@ export default function App() {
                 value={mastodonHandle}
                 onChange={setMastodonHandle}
                 placeholder="e.g. user@mastodon.social"
+              />
+
+              <Field
+                label="YouTube Channel"
+                value={youtubeChannel}
+                onChange={setYoutubeChannel}
+                placeholder="e.g. NetworkChuck or your own channel name"
               />
             </div>
 
@@ -173,7 +200,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="grid gap-6 xl:grid-cols-3">
               <EvidenceCard
                 title="GitHub Evidence"
                 accent="cyan"
@@ -206,12 +233,26 @@ export default function App() {
                 footerItems={mastodon.profile_url ? [mastodon.profile_url] : []}
                 footerLabel="Profile URL"
               />
+
+              <EvidenceCard
+                title="YouTube Evidence"
+                accent="cyan"
+                rows={[
+                  ["Channel Title", youtube.channel_title ?? "—"],
+                  ["Description", youtube.channel_description ?? "—"],
+                  ["Activity Sample Size", youtube.activity_sample_size ?? 0],
+                ]}
+                chips={youtube.video_titles ?? []}
+                chipLabel="Recent Video Titles"
+                footerItems={youtube.video_descriptions ?? []}
+                footerLabel="Video Descriptions"
+              />
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-zinc-900/70 p-6 shadow-2xl shadow-black/20 backdrop-blur">
               <h3 className="text-xl font-semibold">Shared Indicators</h3>
               <p className="mt-2 text-sm text-zinc-400">
-                Evidence overlap currently detected across the two sources.
+                Evidence overlap currently detected across the collected sources.
               </p>
 
               <div className="mt-5">
@@ -237,64 +278,37 @@ export default function App() {
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-zinc-900/70 p-6 shadow-2xl shadow-black/20 backdrop-blur">
-              <h3 className="text-xl font-semibold">Behavioural Activity Evidence</h3>
+              <h3 className="text-xl font-semibold">
+                Behavioural Activity Evidence
+              </h3>
               <p className="mt-2 text-sm text-zinc-400">
-                This section will populate once your backend returns activity
-                similarity data and activity timing summaries.
+                Activity timing summaries across the available platforms.
               </p>
 
-              <div className="mt-6 grid gap-6 md:grid-cols-2">
-                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-                  <p className="text-sm font-medium text-cyan-300">
-                    GitHub Top Active Hours
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(github.top_active_hours ?? []).length ? (
-                      github.top_active_hours.map((hour) => (
-                        <span
-                          key={`gh-${hour}`}
-                          className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-200"
-                        >
-                          {hour}:00
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-zinc-500">
-                        No activity data yet
-                      </span>
-                    )}
-                  </div>
+              <div className="mt-6 grid gap-6 md:grid-cols-3">
+                <ActivityBlock
+                  title="GitHub Top Active Hours"
+                  hours={github.top_active_hours ?? []}
+                  tone="cyan"
+                  prefix="gh"
+                  sampleSize={github.activity_sample_size ?? 0}
+                />
 
-                  <p className="mt-4 text-xs text-zinc-500">
-                    Sample size: {github.activity_sample_size ?? 0}
-                  </p>
-                </div>
+                <ActivityBlock
+                  title="Mastodon Top Active Hours"
+                  hours={mastodon.top_active_hours ?? []}
+                  tone="violet"
+                  prefix="md"
+                  sampleSize={mastodon.activity_sample_size ?? 0}
+                />
 
-                <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
-                  <p className="text-sm font-medium text-violet-300">
-                    Mastodon Top Active Hours
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(mastodon.top_active_hours ?? []).length ? (
-                      mastodon.top_active_hours.map((hour) => (
-                        <span
-                          key={`md-${hour}`}
-                          className="rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-200"
-                        >
-                          {hour}:00
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-zinc-500">
-                        No activity data yet
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="mt-4 text-xs text-zinc-500">
-                    Sample size: {mastodon.activity_sample_size ?? 0}
-                  </p>
-                </div>
+                <ActivityBlock
+                  title="YouTube Upload Hours"
+                  hours={youtube.top_active_hours ?? []}
+                  tone="cyan"
+                  prefix="yt"
+                  sampleSize={youtube.activity_sample_size ?? 0}
+                />
               </div>
             </div>
           </section>
@@ -362,7 +376,7 @@ function EvidenceCard({
               className="flex items-start justify-between gap-4 rounded-2xl border border-white/5 bg-zinc-950/60 px-4 py-3"
             >
               <span className="text-sm text-zinc-400">{label}</span>
-              <span className="max-w-[60%] text-right text-sm text-zinc-200">
+              <span className="max-w-[60%] text-right text-sm text-zinc-200 break-words">
                 {String(value)}
               </span>
             </div>
@@ -392,12 +406,12 @@ function EvidenceCard({
 
       <div className="mt-5">
         <p className="mb-3 text-sm font-medium text-zinc-300">{footerLabel}</p>
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-56 overflow-auto pr-1">
           {footerItems.length ? (
             footerItems.map((item, index) => (
               <div
                 key={`${title}-footer-${index}`}
-                className="rounded-2xl border border-white/5 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-300"
+                className="rounded-2xl border border-white/5 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-300 break-words"
               >
                 {item}
               </div>
@@ -407,6 +421,42 @@ function EvidenceCard({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ActivityBlock({ title, hours = [], tone = "cyan", prefix, sampleSize = 0 }) {
+  const toneWrapper =
+    tone === "violet"
+      ? "border-violet-500/20 bg-violet-500/5"
+      : "border-cyan-500/20 bg-cyan-500/5";
+
+  const toneText = tone === "violet" ? "text-violet-300" : "text-cyan-300";
+  const toneChip =
+    tone === "violet"
+      ? "border-violet-500/20 bg-violet-500/10 text-violet-200"
+      : "border-cyan-500/20 bg-cyan-500/10 text-cyan-200";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneWrapper}`}>
+      <p className={`text-sm font-medium ${toneText}`}>{title}</p>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {hours.length ? (
+          hours.map((hour) => (
+            <span
+              key={`${prefix}-${hour}`}
+              className={`rounded-full border px-3 py-1 text-xs ${toneChip}`}
+            >
+              {hour}:00
+            </span>
+          ))
+        ) : (
+          <span className="text-sm text-zinc-500">No activity data yet</span>
+        )}
+      </div>
+
+      <p className="mt-4 text-xs text-zinc-500">Sample size: {sampleSize}</p>
     </div>
   );
 }
